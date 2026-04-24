@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mobile Legend Diamond Sale Management</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Exo+2:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+:root {
+  --bg:#07080f; --bg2:#0d0f1c; --bg3:#131629;
+  --card:#161a2e; --card2:#1c2040;
+  --border:rgba(80,160,255,0.18); --border2:rgba(80,160,255,0.35);
+  --accent:#3fa0ff; --accent2:#00e5ff;
+  --gold:#ffd700; --gold2:#ffaa00;
+  --green:#00e676; --red:#ff5252;
+  --text:#e8eaf6; --text2:#8892b0; --text3:#4a5568;
+  --diamond:#5ce1ff; --glow:rgba(63,160,255,0.25);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'Exo 2',sans-serif;min-height:100vh;}
+body::before{
+  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(ellipse 80% 40% at 20% 10%,rgba(63,100,255,0.08) 0%,transparent 60%),
+    radial-gradient(ellipse 60% 50% at 80% 80%,rgba(0,229,255,0.06) 0%,transparent 60%),
+    repeating-linear-gradient(0deg,transparent,transparent 40px,rgba(80,160,255,0.02) 40px,rgba(80,160,255,0.02) 41px),
+    repeating-linear-gradient(90deg,transparent,transparent 40px,rgba(80,160,255,0.02) 40px,rgba(80,160,255,0.02) 41px);
+}
+#app{position:relative;z-index:1;}
+
+/* ── LOADING SCREEN ── */
+#loading-screen{
+  min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:1rem;
+}
+.spinner{
+  width:48px;height:48px;border:3px solid var(--border);border-top-color:var(--accent2);
+  border-radius:50%;animation:spin 0.8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loading-text{color:var(--text2);font-size:.9rem;}
+
+/* ── LOGIN ── */
+#login-screen{min-height:100vh;display:none;align-items:center;justify-content:center;padding:2rem;}
+.login-box{
+  background:var(--card);border:1px solid var(--border2);border-radius:20px;
+  padding:3rem 2.5rem;width:100%;max-width:440px;text-align:center;
+  box-shadow:0 0 60px rgba(63,160,255,0.1);
+}
+.login-diamond{font-size:60px;margin-bottom:1rem;filter:drop-shadow(0 0 20px var(--diamond));}
+.login-box h1{font-family:'Rajdhani',sans-serif;font-size:1.65rem;font-weight:700;color:var(--accent2);letter-spacing:2px;margin-bottom:.4rem;line-height:1.2;}
+.login-box .sub{color:var(--text2);font-size:.9rem;margin-bottom:2.5rem;}
+.google-btn{
+  display:flex;align-items:center;justify-content:center;gap:12px;
+  background:white;color:#1a1a2e;border:none;border-radius:10px;
+  padding:.9rem 1.5rem;font-size:1rem;font-weight:600;cursor:pointer;
+  width:100%;font-family:'Exo 2',sans-serif;transition:all .2s;
+}
+.google-btn:hover{background:#f0f0f0;transform:translateY(-1px);box-shadow:0 4px 20px rgba(255,255,255,0.15);}
+.google-btn:disabled{opacity:.6;cursor:not-allowed;transform:none;}
+.google-icon{width:22px;height:22px;flex-shrink:0;}
+.login-err{margin-top:1rem;font-size:.82rem;color:var(--red);min-height:1.2rem;}
+.login-note{margin-top:1.2rem;font-size:.75rem;color:var(--text3);line-height:1.6;}
+
+/* ── MAIN APP ── */
+#main-app{display:none;}
+header{
+  background:var(--card);border-bottom:1px solid var(--border);
+  padding:1rem 1.5rem;display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:100;
+}
+.header-left{display:flex;align-items:center;gap:12px;}
+.header-title{font-family:'Rajdhani',sans-serif;font-size:1.2rem;font-weight:700;letter-spacing:1px;color:var(--accent2);line-height:1.2;}
+.header-title span{color:var(--gold);}
+.diamond-icon{font-size:26px;filter:drop-shadow(0 0 8px var(--diamond));}
+.user-info{display:flex;align-items:center;gap:10px;}
+.user-avatar{width:36px;height:36px;border-radius:50%;border:2px solid var(--accent);object-fit:cover;}
+.user-name{font-size:.82rem;color:var(--text2);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.logout-btn{background:transparent;border:1px solid var(--border);color:var(--text2);padding:.4rem .9rem;border-radius:8px;cursor:pointer;font-size:.8rem;font-family:'Exo 2',sans-serif;transition:all .2s;white-space:nowrap;}
+.logout-btn:hover{border-color:var(--red);color:var(--red);}
+
+/* ── SYNC INDICATOR ── */
+.sync-dot{width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block;margin-right:4px;}
+.sync-dot.syncing{background:var(--gold);animation:pulse 1s infinite;}
+.sync-dot.error{background:var(--red);}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+#sync-status{font-size:.75rem;color:var(--text2);display:flex;align-items:center;gap:4px;}
+
+/* ── TABS ── */
+.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--bg2);padding:0 1.5rem;overflow-x:auto;}
+.tab-btn{background:transparent;border:none;color:var(--text2);padding:.9rem 1.1rem;cursor:pointer;font-family:'Exo 2',sans-serif;font-size:.88rem;font-weight:500;border-bottom:2px solid transparent;white-space:nowrap;transition:all .2s;}
+.tab-btn.active{color:var(--accent2);border-bottom-color:var(--accent2);}
+.tab-btn:hover:not(.active){color:var(--text);}
+
+/* ── TAB CONTENT ── */
+.tab-content{display:none;padding:1.5rem;}
+.tab-content.active{display:block;}
+
+/* ── CARDS ── */
+.section-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:1.5rem;margin-bottom:1.5rem;}
+.section-title{font-family:'Rajdhani',sans-serif;font-size:1.1rem;font-weight:700;color:var(--accent);letter-spacing:1px;margin-bottom:1rem;display:flex;align-items:center;gap:8px;}
+
+/* ── RATE ── */
+.rate-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.rate-input-group{display:flex;align-items:center;gap:8px;flex:1;min-width:220px;}
+.rate-input-group label{color:var(--text2);font-size:.9rem;white-space:nowrap;}
+.rate-input{background:var(--bg3);border:1px solid var(--border2);color:var(--text);border-radius:10px;padding:.6rem 1rem;font-size:1rem;font-family:'Exo 2',sans-serif;width:130px;outline:none;transition:border-color .2s;}
+.rate-input:focus{border-color:var(--accent2);}
+.rate-display{color:var(--gold);font-weight:600;font-size:.9rem;}
+
+/* ── STATS ── */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin-bottom:1.5rem;}
+.stat-card{background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:1rem 1.2rem;}
+.stat-label{font-size:.72rem;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:.4rem;}
+.stat-value{font-size:1.35rem;font-family:'Rajdhani',sans-serif;font-weight:700;}
+.stat-value.green{color:var(--green);}
+.stat-value.gold{color:var(--gold);}
+.stat-value.accent{color:var(--accent2);}
+.stat-value.red{color:var(--red);}
+
+/* ── PACKAGES ── */
+.pkg-section-title{font-family:'Rajdhani',sans-serif;color:var(--text2);font-size:.82rem;letter-spacing:2px;text-transform:uppercase;margin:1.2rem 0 .7rem;}
+.pkg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;}
+.pkg-card{background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:1rem;position:relative;transition:border-color .2s;}
+.pkg-card:hover{border-color:var(--border2);}
+.pkg-name{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:1rem;color:var(--diamond);margin-bottom:.25rem;}
+.pkg-badge{display:inline-block;background:rgba(255,215,0,0.15);color:var(--gold2);font-size:.68rem;padding:1px 7px;border-radius:20px;border:1px solid rgba(255,215,0,0.25);margin-bottom:.4rem;}
+.pkg-cost{font-size:.75rem;color:var(--text3);margin-bottom:.3rem;}
+.pkg-sc{font-size:.78rem;color:var(--text2);margin-bottom:.5rem;}
+.pkg-sc span{color:var(--accent);font-weight:600;}
+.pkg-sell-row{display:flex;align-items:center;gap:5px;}
+.pkg-sell-label{font-size:.7rem;color:var(--text2);}
+.pkg-sell-input{background:var(--card2);border:1px solid var(--border);color:var(--gold);border-radius:6px;padding:.28rem .45rem;font-size:.84rem;font-family:'Exo 2',sans-serif;width:78px;outline:none;transition:border-color .2s;font-weight:600;}
+.pkg-sell-input:focus{border-color:var(--gold);}
+.pkg-profit-badge{position:absolute;top:8px;right:8px;font-size:.66rem;padding:2px 7px;border-radius:20px;}
+.profit-pos{background:rgba(0,230,118,0.15);color:var(--green);border:1px solid rgba(0,230,118,0.25);}
+.profit-neg{background:rgba(255,82,82,0.15);color:var(--red);border:1px solid rgba(255,82,82,0.25);}
+
+/* ── FORM ── */
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:1rem;}
+.form-group{display:flex;flex-direction:column;gap:.4rem;}
+.form-label{font-size:.8rem;color:var(--text2);}
+.form-input,.form-select{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:.65rem 1rem;font-size:.9rem;font-family:'Exo 2',sans-serif;outline:none;transition:border-color .2s;}
+.form-input:focus,.form-select:focus{border-color:var(--accent2);}
+.form-select option{background:var(--bg3);}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#07080f;border:none;border-radius:10px;padding:.7rem 1.5rem;font-size:.9rem;font-weight:700;cursor:pointer;font-family:'Exo 2',sans-serif;transition:all .2s;letter-spacing:.5px;}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 20px var(--glow);}
+.btn-primary:disabled{opacity:.6;cursor:not-allowed;transform:none;}
+.btn-secondary{background:transparent;border:1px solid var(--border2);color:var(--accent);border-radius:10px;padding:.65rem 1.2rem;font-size:.85rem;cursor:pointer;font-family:'Exo 2',sans-serif;transition:all .2s;}
+.btn-secondary:hover{background:rgba(63,160,255,0.08);}
+
+/* ── SALE PREVIEW ── */
+#sale-preview{display:none;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:1rem;margin-bottom:1rem;font-size:.88rem;}
+
+/* ── TABLE ── */
+.table-wrap{overflow-x:auto;border-radius:12px;border:1px solid var(--border);}
+table{width:100%;border-collapse:collapse;font-size:.84rem;}
+thead{background:var(--bg3);}
+th{padding:.72rem 1rem;text-align:left;color:var(--text2);font-weight:500;font-size:.76rem;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;}
+td{padding:.68rem 1rem;border-top:1px solid var(--border);white-space:nowrap;}
+tr:hover td{background:rgba(63,160,255,0.04);}
+.td-profit.pos{color:var(--green);font-weight:600;}
+.td-profit.neg{color:var(--red);font-weight:600;}
+.td-del{background:transparent;border:none;color:var(--text3);cursor:pointer;font-size:.95rem;transition:color .2s;padding:0 4px;}
+.td-del:hover{color:var(--red);}
+
+/* ── SEARCH ── */
+.search-input{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:.65rem 1rem;font-size:.9rem;font-family:'Exo 2',sans-serif;outline:none;width:100%;transition:border-color .2s;margin-bottom:1rem;}
+.search-input:focus{border-color:var(--accent2);}
+.customer-card{background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:1.2rem;margin-bottom:1rem;}
+.cust-header{display:flex;align-items:center;gap:12px;margin-bottom:.8rem;}
+.cust-avatar{width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:1.1rem;color:#07080f;flex-shrink:0;}
+.cust-name-text{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:1.05rem;}
+.cust-id-text{font-size:.76rem;color:var(--text2);}
+.cust-stats{display:flex;gap:1.5rem;flex-wrap:wrap;margin-bottom:.8rem;}
+.cust-stat-label{font-size:.68rem;color:var(--text3);}
+.cust-stat-value{font-size:.9rem;font-weight:600;color:var(--accent2);}
+
+/* ── EXPORT ── */
+.export-card{background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:1.5rem;text-align:center;}
+.export-info{font-size:.9rem;color:var(--text2);margin-bottom:1.2rem;line-height:1.7;}
+.next-sunday{font-weight:600;color:var(--gold);}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:2rem;right:2rem;background:var(--card2);border:1px solid var(--green);color:var(--green);padding:.8rem 1.4rem;border-radius:10px;font-size:.88rem;font-weight:500;z-index:9999;opacity:0;transform:translateY(10px);transition:all .3s;pointer-events:none;max-width:300px;}
+#toast.show{opacity:1;transform:translateY(0);}
+#toast.error{border-color:var(--red);color:var(--red);}
+
+.empty-state{text-align:center;padding:3rem;color:var(--text3);}
+.empty-icon{font-size:2.5rem;margin-bottom:.5rem;}
+.empty-text{font-size:.88rem;}
+
+@media(max-width:600px){
+  header{padding:.75rem 1rem;}
+  .header-title{font-size:.95rem;}
+  .user-name{display:none;}
+  .tab-content{padding:1rem;}
+  .section-card{padding:1rem;}
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- LOADING -->
+<div id="loading-screen">
+  <div class="spinner"></div>
+  <div class="loading-text">Connecting to Firebase...</div>
+</div>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-diamond">💎</div>
+    <h1>MOBILE LEGEND<br><span style="color:var(--gold)">DIAMOND</span> SALE</h1>
+    <p class="sub">Sign in to access your seller dashboard</p>
+    <button class="google-btn" id="google-signin-btn" onclick="signInWithGoogle()">
+      <svg class="google-icon" viewBox="0 0 24 24">
+        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+      </svg>
+      Sign in with Google
+    </button>
+    <div class="login-err" id="login-err"></div>
+    <p class="login-note">
+      Your data is securely stored in Firebase Firestore and synced across all your devices.<br>
+      Only your Google account can access your data.
+    </p>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="main-app">
+  <header>
+    <div class="header-left">
+      <span class="diamond-icon">💎</span>
+      <div>
+        <div class="header-title">MOBILE LEGEND <span>DIAMOND</span> SALE MANAGEMENT</div>
+        <div id="sync-status"><span class="sync-dot" id="sync-dot"></span><span id="sync-text">Synced</span></div>
+      </div>
+    </div>
+    <div class="user-info">
+      <img id="user-avatar" class="user-avatar" src="" alt="avatar" onerror="this.src='https://ui-avatars.com/api/?name=U&background=3fa0ff&color=07080f'">
+      <span class="user-name" id="user-name-display"></span>
+      <button class="logout-btn" onclick="logout()">Logout</button>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard',this)">📊 Dashboard</button>
+    <button class="tab-btn" data-tab="packages" onclick="switchTab('packages',this)">💎 Packages</button>
+    <button class="tab-btn" data-tab="sales" onclick="switchTab('sales',this)">📝 Record Sale</button>
+    <button class="tab-btn" data-tab="history" onclick="switchTab('history',this)">📋 History</button>
+    <button class="tab-btn" data-tab="search" onclick="switchTab('search',this)">🔍 Search</button>
+    <button class="tab-btn" data-tab="export" onclick="switchTab('export',this)">📤 Export</button>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="tab-dashboard" class="tab-content active">
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-label">Total Revenue</div><div class="stat-value gold" id="s-revenue">0 Ks</div></div>
+      <div class="stat-card"><div class="stat-label">Total Cost</div><div class="stat-value red" id="s-cost">0 Ks</div></div>
+      <div class="stat-card"><div class="stat-label">Total Profit</div><div class="stat-value green" id="s-profit">0 Ks</div></div>
+      <div class="stat-card"><div class="stat-label">Total Sales</div><div class="stat-value accent" id="s-count">0</div></div>
+    </div>
+    <div class="section-card">
+      <div class="section-title">⚙️ Daily Sc Rate</div>
+      <div class="rate-row">
+        <div class="rate-input-group">
+          <label>1 Smile Coin =</label>
+          <input class="rate-input" type="number" id="coin-rate" placeholder="75.5" step="0.1" min="0" oninput="syncRate('coin-rate')">
+          <label>Kyats</label>
+        </div>
+        <div class="rate-display" id="rate-status">Enter today's Sc rate ↑</div>
+      </div>
+    </div>
+    <div class="section-card">
+      <div class="section-title">📈 Recent Sales</div>
+      <div id="recent-sales-wrap"><div class="empty-state"><div class="empty-icon">💸</div><div class="empty-text">No sales yet. Record your first sale!</div></div></div>
+    </div>
+  </div>
+
+  <!-- PACKAGES -->
+  <div id="tab-packages" class="tab-content">
+    <div class="section-card" style="margin-bottom:1rem">
+      <div class="section-title">⚙️ Daily Sc Rate</div>
+      <div class="rate-row">
+        <div class="rate-input-group">
+          <label>1 Smile Coin =</label>
+          <input class="rate-input" type="number" id="coin-rate-pkg" placeholder="75.5" step="0.1" min="0" oninput="syncRate('coin-rate-pkg')">
+          <label>Kyats</label>
+        </div>
+        <div class="rate-display" id="rate-status-pkg">Prices auto-calculate</div>
+      </div>
+    </div>
+    <div class="section-card">
+      <div class="section-title">💎 Package Price List</div>
+      <p style="font-size:.82rem;color:var(--text2);margin-bottom:1rem">Set the daily Sc rate above. Enter your <strong style="color:var(--gold)">selling price</strong> per package to track profit. Prices are saved to your account.</p>
+      <div id="pkg-list-container"></div>
+    </div>
+  </div>
+
+  <!-- RECORD SALE -->
+  <div id="tab-sales" class="tab-content">
+    <div class="section-card">
+      <div class="section-title">📝 Record New Sale</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Date</label>
+          <input class="form-input" type="date" id="sale-date">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Customer Game ID</label>
+          <input class="form-input" type="text" id="sale-customer-id" placeholder="e.g. 12345678">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Customer Name (optional)</label>
+          <input class="form-input" type="text" id="sale-customer-name" placeholder="e.g. PlayerOne">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Diamond Package</label>
+          <select class="form-select" id="sale-package" onchange="onPackageChange()">
+            <option value="">Select package...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Selling Price (Kyats)</label>
+          <input class="form-input" type="number" id="sale-sell-price" placeholder="Enter selling price" oninput="updateSaleCalc()">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Notes (optional)</label>
+          <input class="form-input" type="text" id="sale-notes" placeholder="Any notes...">
+        </div>
+      </div>
+      <div id="sale-preview">
+        <div style="display:flex;gap:2rem;flex-wrap:wrap;">
+          <div><span style="color:var(--text2)">Cost Price: </span><span id="prev-cost" style="color:var(--red)"></span></div>
+          <div><span style="color:var(--text2)">Sell Price: </span><span id="prev-sell" style="color:var(--gold)"></span></div>
+          <div><span style="color:var(--text2)">Profit: </span><span id="prev-profit"></span></div>
+        </div>
+      </div>
+      <button class="btn-primary" id="record-btn" onclick="recordSale()">+ Record Sale</button>
+    </div>
+  </div>
+
+  <!-- HISTORY -->
+  <div id="tab-history" class="tab-content">
+    <div class="section-card">
+      <div class="section-title">📋 Sales History</div>
+      <div style="display:flex;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center;">
+        <input class="form-input" type="date" id="filter-from" style="max-width:160px" oninput="renderHistory()">
+        <span style="color:var(--text2);font-size:.85rem">to</span>
+        <input class="form-input" type="date" id="filter-to" style="max-width:160px" oninput="renderHistory()">
+        <button class="btn-secondary" onclick="clearFilter()">Clear</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Customer ID</th><th>Name</th><th>Package</th><th>Cost (Ks)</th><th>Sell (Ks)</th><th>Profit (Ks)</th><th>Notes</th><th></th></tr></thead>
+          <tbody id="history-tbody"></tbody>
+        </table>
+      </div>
+      <div id="history-empty" class="empty-state" style="display:none"><div class="empty-icon">📋</div><div class="empty-text">No sales recorded yet.</div></div>
+    </div>
+  </div>
+
+  <!-- SEARCH -->
+  <div id="tab-search" class="tab-content">
+    <div class="section-card">
+      <div class="section-title">🔍 Customer Search</div>
+      <input class="search-input" type="text" id="search-input" placeholder="Search by Customer ID or Name..." oninput="runSearch()">
+      <div id="search-results"></div>
+    </div>
+  </div>
+
+  <!-- EXPORT -->
+  <div id="tab-export" class="tab-content">
+    <div class="section-card">
+      <div class="section-title">📤 Export Data</div>
+      <div class="export-card">
+        <div style="font-size:2rem;margin-bottom:.8rem">📊</div>
+        <div class="export-info">
+          Download all your sales as an Excel file (.xlsx).<br>
+          Includes date, customer ID, package, cost, sell price, and profit.
+        </div>
+        <div id="next-export-info" style="font-size:.82rem;color:var(--green);margin-bottom:.5rem"></div>
+        <button class="btn-primary" onclick="exportExcel()">⬇ Download Excel Now</button>
+        <div style="margin-top:1.5rem;border-top:1px solid var(--border);padding-top:1.2rem">
+          <div style="font-size:.8rem;color:var(--text2);margin-bottom:.4rem">Every Sunday you will be reminded to download your weekly export.</div>
+          <div id="auto-export-status" style="font-size:.78rem;color:var(--green)"></div>
+        </div>
+      </div>
+    </div>
+    <div class="section-card">
+      <div class="section-title">🗑️ Data Management</div>
+      <p style="font-size:.85rem;color:var(--text2);margin-bottom:1rem">Permanently delete all sales from your account. Export first!</p>
+      <button class="btn-secondary" style="border-color:var(--red);color:var(--red)" onclick="clearAllData()">Delete All Sales Data</button>
+    </div>
+  </div>
+</div>
+
+</div>
+<div id="toast"></div>
+
+<script>
+// ── FIREBASE INIT ──
+const firebaseConfig = {
+  apiKey: "AIzaSyDYkfFp-r5xh7kLoLn4nvytAMCQrngVKQ4",
+  authDomain: "sale-manager-7c911.firebaseapp.com",
+  projectId: "sale-manager-7c911",
+  storageBucket: "sale-manager-7c911.firebasestorage.app",
+  messagingSenderId: "88529999283",
+  appId: "1:88529999283:web:94e18ca09cf4643cb2e7c6",
+  measurementId: "G-YFG1WYN43B"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db   = firebase.firestore();
+
+// ── PACKAGES DATA ──
+const PACKAGES = [
+  {id:'2x_50',   name:'50+50',        category:'2x Diamonds', sc:39,     diamonds:100},
+  {id:'2x_150',  name:'150+150',      category:'2x Diamonds', sc:116.9,  diamonds:300},
+  {id:'2x_250',  name:'250+250',      category:'2x Diamonds', sc:187.5,  diamonds:500},
+  {id:'2x_500',  name:'500+500',      category:'2x Diamonds', sc:385,    diamonds:1000},
+  {id:'n_86',    name:'86',           category:'Normal',      sc:61.5,   diamonds:86},
+  {id:'n_172',   name:'172',          category:'Normal',      sc:122,    diamonds:172},
+  {id:'n_257',   name:'257',          category:'Normal',      sc:177.5,  diamonds:257},
+  {id:'n_343',   name:'343',          category:'Normal',      sc:239,    diamonds:343},
+  {id:'n_429',   name:'429',          category:'Normal',      sc:299.5,  diamonds:429},
+  {id:'n_514',   name:'514',          category:'Normal',      sc:355,    diamonds:514},
+  {id:'n_600',   name:'600',          category:'Normal',      sc:416.5,  diamonds:600},
+  {id:'n_706',   name:'706',          category:'Normal',      sc:480,    diamonds:706},
+  {id:'n_878',   name:'878',          category:'Normal',      sc:602,    diamonds:878},
+  {id:'n_1050',  name:'1050',         category:'Normal',      sc:724,    diamonds:1050},
+  {id:'n_2195',  name:'2195',         category:'Normal',      sc:1453,   diamonds:2195},
+  {id:'n_3688',  name:'3688',         category:'Normal',      sc:2424,   diamonds:3688},
+  {id:'n_5532',  name:'5532',         category:'Normal',      sc:3660,   diamonds:5532},
+  {id:'n_9288',  name:'9288',         category:'Normal',      sc:6079,   diamonds:9288},
+  {id:'p_weekly',name:'Weekly Pass',  category:'Passes',      sc:76,     diamonds:0},
+  {id:'p_twilight',name:'Twilight Pass',category:'Passes',    sc:402.5,  diamonds:0},
+];
+
+// ── STATE ──
+let currentUser = null;
+let state = { coinRate:0, sellPrices:{}, sales:[] };
+let salesListener = null;
+
+// ── AUTH ──
+auth.onAuthStateChanged(user => {
+  document.getElementById('loading-screen').style.display = 'none';
+  if (user) {
+    currentUser = user;
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('main-app').style.display = 'block';
+    document.getElementById('user-name-display').textContent = user.displayName || user.email;
+    document.getElementById('user-avatar').src = user.photoURL || '';
+    loadUserSettings();
+    subscribeToSales();
+    initUI();
+  } else {
+    currentUser = null;
+    if (salesListener) { salesListener(); salesListener = null; }
+    document.getElementById('main-app').style.display = 'none';
+    document.getElementById('login-screen').style.display = 'flex';
+  }
+});
+
+function signInWithGoogle() {
+  const btn = document.getElementById('google-signin-btn');
+  btn.disabled = true;
+  btn.textContent = 'Signing in...';
+  document.getElementById('login-err').textContent = '';
+  const provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider).catch(err => {
+    document.getElementById('login-err').textContent = err.message;
+    btn.disabled = false;
+    btn.innerHTML = `<svg class="google-icon" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg> Sign in with Google`;
+  });
+}
+
+function logout() {
+  auth.signOut();
+}
+
+// ── FIRESTORE PATHS ──
+function userDoc()   { return db.collection('users').doc(currentUser.uid); }
+function salesCol()  { return userDoc().collection('sales'); }
+
+// ── LOAD / SAVE SETTINGS ──
+async function loadUserSettings() {
+  try {
+    const doc = await userDoc().get();
+    if (doc.exists) {
+      const d = doc.data();
+      state.coinRate   = d.coinRate   || 0;
+      state.sellPrices = d.sellPrices || {};
+    }
+    if (state.coinRate > 0) {
+      ['coin-rate','coin-rate-pkg'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = state.coinRate;
+      });
+    }
+    buildPackageList();
+    updateAllPrices();
+  } catch(e) { console.error(e); }
+}
+
+async function saveSettings() {
+  if (!currentUser) return;
+  setSyncStatus('syncing');
+  try {
+    await userDoc().set({ coinRate:state.coinRate, sellPrices:state.sellPrices }, {merge:true});
+    setSyncStatus('ok');
+  } catch(e) { setSyncStatus('error'); console.error(e); }
+}
+
+// ── REAL-TIME SALES LISTENER ──
+function subscribeToSales() {
+  if (salesListener) salesListener();
+  salesListener = salesCol().orderBy('date','desc').onSnapshot(snap => {
+    state.sales = snap.docs.map(d => ({id:d.id, ...d.data()}));
+    renderHistory();
+    updateSummaryStats();
+    renderRecentSales();
+  }, err => { console.error(err); setSyncStatus('error'); });
+}
+
+// ── SYNC STATUS ──
+function setSyncStatus(status) {
+  const dot  = document.getElementById('sync-dot');
+  const text = document.getElementById('sync-text');
+  if (!dot) return;
+  dot.className  = 'sync-dot' + (status==='syncing' ? ' syncing' : status==='error' ? ' error' : '');
+  text.textContent = status==='syncing' ? 'Saving...' : status==='error' ? 'Error' : 'Synced';
+}
+
+// ── UI INIT ──
+function initUI() {
+  document.getElementById('sale-date').value = new Date().toISOString().split('T')[0];
+  populateSaleSelect();
+  checkSundayExport();
+  setNextSundayInfo();
+}
+
+// ── RATE ──
+function syncRate(sourceId) {
+  const val = parseFloat(document.getElementById(sourceId).value) || 0;
+  state.coinRate = val;
+  ['coin-rate','coin-rate-pkg'].forEach(id => {
+    if (id !== sourceId) {
+      const el = document.getElementById(id);
+      if (el) el.value = val > 0 ? val : '';
+    }
+  });
+  updateAllPrices();
+  saveSettings();
+}
+
+function updateAllPrices() {
+  const rate = state.coinRate;
+  const txt  = rate > 0 ? `1 Sc = ${rate.toFixed(1)} Ks` : 'Enter today\'s Sc rate';
+  ['rate-status','rate-status-pkg'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = txt;
+  });
+  PACKAGES.forEach(pkg => {
+    const costEl = document.getElementById('cost-'+pkg.id);
+    if (costEl) {
+      costEl.textContent = rate > 0
+        ? 'Cost: ' + Math.round(pkg.sc * rate).toLocaleString() + ' Ks'
+        : 'Cost: set rate above';
+      updatePkgProfit(pkg.id);
+    }
+  });
+  updateSaleCalc();
+}
+
+// ── PACKAGES ──
+function buildPackageList() {
+  const container = document.getElementById('pkg-list-container');
+  if (!container) return;
+  const cats = [...new Set(PACKAGES.map(p => p.category))];
+  let html = '';
+  cats.forEach(cat => {
+    html += `<div class="pkg-section-title">◆ ${cat}</div><div class="pkg-grid">`;
+    PACKAGES.filter(p => p.category === cat).forEach(pkg => {
+      const sell   = state.sellPrices[pkg.id] || '';
+      const badge  = cat==='2x Diamonds' ? '2X BONUS' : cat==='Passes' ? 'PASS' : '';
+      html += `
+        <div class="pkg-card" id="pkgcard-${pkg.id}">
+          ${badge ? `<span class="pkg-badge">${badge}</span><br>` : ''}
+          <div class="pkg-name">${pkg.name} ${cat!=='Passes'?'💎':'🎫'}</div>
+          <div class="pkg-cost" id="cost-${pkg.id}">Cost: calculating...</div>
+          <div class="pkg-sc">Sc Cost: <span>${pkg.sc} Sc</span></div>
+          <div class="pkg-sell-row">
+            <span class="pkg-sell-label">Sell:</span>
+            <input class="pkg-sell-input" type="number" id="sell-${pkg.id}" value="${sell}" placeholder="0"
+              oninput="saveSellPrice('${pkg.id}')">
+            <span class="pkg-sell-label">Ks</span>
+          </div>
+          <span class="pkg-profit-badge" id="profitbadge-${pkg.id}"></span>
+        </div>`;
+    });
+    html += '</div>';
+  });
+  container.innerHTML = html;
+  updateAllPrices();
+}
+
+function saveSellPrice(pkgId) {
+  const val = parseFloat(document.getElementById('sell-'+pkgId).value) || 0;
+  state.sellPrices[pkgId] = val;
+  updatePkgProfit(pkgId);
+  saveSettings();
+}
+
+function updatePkgProfit(pkgId) {
+  const pkg = PACKAGES.find(p => p.id===pkgId);
+  if (!pkg) return;
+  const badge = document.getElementById('profitbadge-'+pkgId);
+  if (!badge) return;
+  const sell = state.sellPrices[pkgId] || 0;
+  const cost = state.coinRate > 0 ? pkg.sc * state.coinRate : 0;
+  if (!sell || !cost) { badge.textContent=''; badge.className='pkg-profit-badge'; return; }
+  const profit = sell - cost;
+  badge.textContent = (profit>=0?'+':'') + Math.round(profit).toLocaleString() + ' Ks';
+  badge.className   = 'pkg-profit-badge ' + (profit>=0?'profit-pos':'profit-neg');
+}
+
+// ── SALE SELECT ──
+function populateSaleSelect() {
+  const sel = document.getElementById('sale-package');
+  sel.innerHTML = '<option value="">Select package...</option>';
+  const cats = [...new Set(PACKAGES.map(p => p.category))];
+  cats.forEach(cat => {
+    const og = document.createElement('optgroup');
+    og.label = cat;
+    PACKAGES.filter(p => p.category===cat).forEach(pkg => {
+      const opt = document.createElement('option');
+      opt.value = pkg.id;
+      opt.textContent = pkg.name + (pkg.diamonds ? ` (${pkg.diamonds} 💎)` : '');
+      og.appendChild(opt);
+    });
+    sel.appendChild(og);
+  });
+}
+
+function onPackageChange() {
+  const pkgId = document.getElementById('sale-package').value;
+  const sellEl = document.getElementById('sale-sell-price');
+  if (pkgId && state.sellPrices[pkgId]) {
+    sellEl.value = state.sellPrices[pkgId];
+    delete sellEl.dataset.manual;
+  } else {
+    sellEl.value = '';
+  }
+  updateSaleCalc();
+}
+
+function updateSaleCalc() {
+  const pkgId = document.getElementById('sale-package').value;
+  const sellEl = document.getElementById('sale-sell-price');
+  const preview = document.getElementById('sale-preview');
+  if (!pkgId) { preview.style.display='none'; return; }
+  const pkg = PACKAGES.find(p => p.id===pkgId);
+  if (!pkg) return;
+  const cost = state.coinRate > 0 ? pkg.sc * state.coinRate : 0;
+  const sell = parseFloat(sellEl.value) || 0;
+  const profit = sell - cost;
+  preview.style.display = (cost||sell) ? 'block' : 'none';
+  document.getElementById('prev-cost').textContent = cost ? Math.round(cost).toLocaleString()+' Ks' : 'Set Sc rate first';
+  document.getElementById('prev-sell').textContent = sell ? sell.toLocaleString()+' Ks' : 'Enter sell price';
+  if (sell && cost) {
+    const el = document.getElementById('prev-profit');
+    el.textContent = (profit>=0?'+':'') + Math.round(profit).toLocaleString()+' Ks';
+    el.style.color  = profit>=0 ? 'var(--green)' : 'var(--red)';
+  } else {
+    document.getElementById('prev-profit').textContent = '';
+  }
+}
+
+// ── RECORD SALE ──
+async function recordSale() {
+  const date      = document.getElementById('sale-date').value;
+  const custId    = document.getElementById('sale-customer-id').value.trim();
+  const custName  = document.getElementById('sale-customer-name').value.trim();
+  const pkgId     = document.getElementById('sale-package').value;
+  const sellPrice = parseFloat(document.getElementById('sale-sell-price').value);
+  const notes     = document.getElementById('sale-notes').value.trim();
+
+  if (!date)      { showToast('Please select a date', true); return; }
+  if (!custId)    { showToast('Please enter Customer Game ID', true); return; }
+  if (!pkgId)     { showToast('Please select a package', true); return; }
+  if (!sellPrice) { showToast('Please enter a selling price', true); return; }
+
+  const pkg  = PACKAGES.find(p => p.id===pkgId);
+  const cost = state.coinRate > 0 ? pkg.sc * state.coinRate : 0;
+
+  const sale = {
+    date, custId, custName,
+    pkgId, pkgName:pkg.name, pkgCategory:pkg.category,
+    diamonds:pkg.diamonds, sc:pkg.sc, coinRate:state.coinRate,
+    costPrice: Math.round(cost*10)/10,
+    sellPrice, profit: Math.round((sellPrice-cost)*10)/10,
+    notes, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+
+  const btn = document.getElementById('record-btn');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  setSyncStatus('syncing');
+
+  try {
+    await salesCol().add(sale);
+    // Save sell price for this package
+    state.sellPrices[pkgId] = sellPrice;
+    await saveSettings();
+
+    // Reset form
+    document.getElementById('sale-customer-id').value  = '';
+    document.getElementById('sale-customer-name').value = '';
+    document.getElementById('sale-package').value       = '';
+    document.getElementById('sale-sell-price').value    = '';
+    document.getElementById('sale-notes').value         = '';
+    document.getElementById('sale-preview').style.display = 'none';
+
+    showToast('Sale saved! Profit: '+(sale.profit>=0?'+':'')+sale.profit.toLocaleString()+' Ks');
+    setSyncStatus('ok');
+  } catch(e) {
+    showToast('Error saving: '+e.message, true);
+    setSyncStatus('error');
+  }
+  btn.disabled = false; btn.textContent = '+ Record Sale';
+}
+
+// ── HISTORY ──
+function renderHistory() {
+  const from  = document.getElementById('filter-from')?.value;
+  const to    = document.getElementById('filter-to')?.value;
+  let sales   = [...state.sales];
+  if (from) sales = sales.filter(s => s.date >= from);
+  if (to)   sales = sales.filter(s => s.date <= to);
+
+  const tbody = document.getElementById('history-tbody');
+  const empty = document.getElementById('history-empty');
+  if (!tbody) return;
+
+  if (!sales.length) {
+    tbody.innerHTML = '';
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  tbody.innerHTML = sales.map(s => `
+    <tr>
+      <td>${s.date}</td>
+      <td style="color:var(--accent2)">${s.custId}</td>
+      <td>${s.custName||'-'}</td>
+      <td>${s.pkgName}</td>
+      <td style="color:var(--red)">${s.costPrice ? s.costPrice.toLocaleString() : '-'}</td>
+      <td style="color:var(--gold)">${s.sellPrice.toLocaleString()}</td>
+      <td class="td-profit ${s.profit>=0?'pos':'neg'}">${(s.profit>=0?'+':'')+s.profit.toLocaleString()}</td>
+      <td style="color:var(--text3);font-size:.78rem">${s.notes||'-'}</td>
+      <td><button class="td-del" onclick="deleteSale('${s.id}')">✕</button></td>
+    </tr>`).join('');
+}
+
+function clearFilter() {
+  document.getElementById('filter-from').value = '';
+  document.getElementById('filter-to').value   = '';
+  renderHistory();
+}
+
+async function deleteSale(id) {
+  if (!confirm('Delete this sale record?')) return;
+  setSyncStatus('syncing');
+  try {
+    await salesCol().doc(id).delete();
+    showToast('Sale deleted');
+    setSyncStatus('ok');
+  } catch(e) { showToast('Error: '+e.message, true); setSyncStatus('error'); }
+}
+
+// ── SUMMARY ──
+function updateSummaryStats() {
+  const s = state.sales;
+  const rev    = s.reduce((a,x) => a+x.sellPrice, 0);
+  const cost   = s.reduce((a,x) => a+(x.costPrice||0), 0);
+  const profit = s.reduce((a,x) => a+x.profit, 0);
+  const el = id => document.getElementById(id);
+  if (el('s-revenue')) el('s-revenue').textContent = Math.round(rev).toLocaleString()+' Ks';
+  if (el('s-cost'))    el('s-cost').textContent    = Math.round(cost).toLocaleString()+' Ks';
+  if (el('s-profit'))  el('s-profit').textContent  = (profit>=0?'+':'')+Math.round(profit).toLocaleString()+' Ks';
+  if (el('s-count'))   el('s-count').textContent   = s.length;
+}
+
+function renderRecentSales() {
+  const wrap = document.getElementById('recent-sales-wrap');
+  if (!wrap) return;
+  const recent = state.sales.slice(0, 5);
+  if (!recent.length) {
+    wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">💸</div><div class="empty-text">No sales yet. Record your first sale!</div></div>';
+    return;
+  }
+  wrap.innerHTML = `<div class="table-wrap"><table>
+    <thead><tr><th>Date</th><th>Customer ID</th><th>Package</th><th>Sell (Ks)</th><th>Profit (Ks)</th></tr></thead>
+    <tbody>${recent.map(s=>`<tr>
+      <td>${s.date}</td>
+      <td style="color:var(--accent2)">${s.custId}</td>
+      <td>${s.pkgName}</td>
+      <td style="color:var(--gold)">${s.sellPrice.toLocaleString()}</td>
+      <td class="td-profit ${s.profit>=0?'pos':'neg'}">${(s.profit>=0?'+':'')+s.profit.toLocaleString()}</td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+// ── SEARCH ──
+function runSearch() {
+  const q       = document.getElementById('search-input').value.trim().toLowerCase();
+  const results = document.getElementById('search-results');
+  if (!q) { results.innerHTML=''; return; }
+
+  const matching = state.sales.filter(s =>
+    s.custId.toLowerCase().includes(q) || (s.custName && s.custName.toLowerCase().includes(q))
+  );
+  if (!matching.length) {
+    results.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-text">No customers found.</div></div>';
+    return;
+  }
+
+  const byCust = {};
+  matching.forEach(s => {
+    if (!byCust[s.custId]) byCust[s.custId] = {id:s.custId, name:s.custName||'', sales:[]};
+    byCust[s.custId].sales.push(s);
+  });
+
+  results.innerHTML = Object.values(byCust).map(cust => {
+    const totalSpent  = cust.sales.reduce((a,s) => a+s.sellPrice, 0);
+    const totalProfit = cust.sales.reduce((a,s) => a+s.profit, 0);
+    const initials    = (cust.name||cust.id).substring(0,2).toUpperCase();
+    return `
+    <div class="customer-card">
+      <div class="cust-header">
+        <div class="cust-avatar">${initials}</div>
+        <div>
+          <div class="cust-name-text">${cust.name||'Unknown'}</div>
+          <div class="cust-id-text">ID: ${cust.id}</div>
+        </div>
+      </div>
+      <div class="cust-stats">
+        <div><div class="cust-stat-label">Purchases</div><div class="cust-stat-value">${cust.sales.length}</div></div>
+        <div><div class="cust-stat-label">Total Spent</div><div class="cust-stat-value">${Math.round(totalSpent).toLocaleString()} Ks</div></div>
+        <div><div class="cust-stat-label">Your Profit</div><div class="cust-stat-value" style="color:${totalProfit>=0?'var(--green)':'var(--red)'}">${(totalProfit>=0?'+':'')+Math.round(totalProfit).toLocaleString()} Ks</div></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Package</th><th>Diamonds</th><th>Spent (Ks)</th><th>Profit (Ks)</th></tr></thead>
+          <tbody>${cust.sales.map(s=>`<tr>
+            <td>${s.date}</td>
+            <td>${s.pkgName}</td>
+            <td>${s.diamonds?s.diamonds+' 💎':'-'}</td>
+            <td style="color:var(--gold)">${s.sellPrice.toLocaleString()}</td>
+            <td class="td-profit ${s.profit>=0?'pos':'neg'}">${(s.profit>=0?'+':'')+s.profit.toLocaleString()}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── EXPORT ──
+function exportExcel() {
+  if (!state.sales.length) { showToast('No sales to export', true); return; }
+
+  const data = state.sales.map(s => ({
+    'Date':s.date, 'Customer ID':s.custId, 'Customer Name':s.custName||'',
+    'Package':s.pkgName, 'Category':s.pkgCategory, 'Diamonds':s.diamonds||0,
+    'Sc Cost':s.sc, 'Sc Rate (Ks)':s.coinRate,
+    'Cost Price (Ks)':s.costPrice||0, 'Sell Price (Ks)':s.sellPrice,
+    'Profit (Ks)':s.profit, 'Notes':s.notes||''
+  }));
+
+  const rev    = state.sales.reduce((a,s)=>a+s.sellPrice,0);
+  const cost   = state.sales.reduce((a,s)=>a+(s.costPrice||0),0);
+  const profit = state.sales.reduce((a,s)=>a+s.profit,0);
+  const summary = [
+    {'Summary':'Total Sales',        'Value':state.sales.length},
+    {'Summary':'Total Revenue (Ks)', 'Value':Math.round(rev)},
+    {'Summary':'Total Cost (Ks)',    'Value':Math.round(cost)},
+    {'Summary':'Total Profit (Ks)',  'Value':Math.round(profit)},
+    {'Summary':'Export Date',        'Value':new Date().toLocaleDateString()},
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data),    'Sales');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summary), 'Summary');
+  XLSX.writeFile(wb, `ML_Diamond_Sales_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+  localStorage.setItem('ml_last_export', new Date().toISOString().split('T')[0]);
+  document.getElementById('auto-export-status').textContent = 'Last exported: '+new Date().toLocaleDateString();
+  showToast('Excel file downloaded!');
+}
+
+async function clearAllData() {
+  if (!confirm('Delete ALL sales data permanently? This cannot be undone.\n\nExport your data first!')) return;
+  setSyncStatus('syncing');
+  try {
+    const snap = await salesCol().get();
+    const batch = db.batch();
+    snap.docs.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+    showToast('All sales deleted');
+    setSyncStatus('ok');
+  } catch(e) { showToast('Error: '+e.message, true); setSyncStatus('error'); }
+}
+
+// ── SUNDAY ──
+function checkSundayExport() {
+  const today = new Date();
+  if (today.getDay()===0) {
+    const last    = localStorage.getItem('ml_last_export');
+    const todayStr = today.toISOString().split('T')[0];
+    if (last!==todayStr && state.sales.length>0) {
+      setTimeout(() => {
+        if (confirm('It\'s Sunday! 📅 Time to export your weekly sales data. Download now?')) exportExcel();
+      }, 2000);
+    }
+  }
+}
+
+function setNextSundayInfo() {
+  const today = new Date();
+  const day   = today.getDay();
+  const diff  = day===0 ? 0 : 7-day;
+  const next  = new Date(today); next.setDate(today.getDate()+diff);
+  const el    = document.getElementById('next-export-info');
+  if (!el) return;
+  if (diff===0) {
+    el.innerHTML = '📅 <strong style="color:var(--gold)">Today is Sunday!</strong> Time to export.';
+  } else {
+    el.innerHTML = `📅 Next Sunday: <span class="next-sunday">${next.toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})}</span> (in ${diff} days)`;
+  }
+  const last = localStorage.getItem('ml_last_export');
+  const statusEl = document.getElementById('auto-export-status');
+  if (statusEl && last) statusEl.textContent = 'Last exported: '+new Date(last).toLocaleDateString();
+}
+
+// ── TABS ──
+function switchTab(name, btnEl) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  if (btnEl) btnEl.classList.add('active');
+  if (name==='dashboard') { updateSummaryStats(); renderRecentSales(); }
+  if (name==='history')   renderHistory();
+  if (name==='packages')  { buildPackageList(); updateAllPrices(); }
+}
+
+// ── TOAST ──
+function showToast(msg, isError=false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className   = 'show'+(isError?' error':'');
+  setTimeout(() => t.className='', 3500);
+}
+</script>
+</body>
+</html>
